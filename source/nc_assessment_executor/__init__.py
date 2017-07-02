@@ -2,7 +2,9 @@ import ast
 import json
 import os.path
 import sys
+import tempfile
 import traceback
+import zipfile
 from flask import Config
 import pika
 import requests
@@ -14,6 +16,15 @@ class AssessmentExecutor(object):
 
     def __init__(self):
         self.config = Config(__name__)
+
+
+    def assessment_request_uri(self,
+            route):
+        route = route.lstrip("/")
+        return "http://{}:{}/{}".format(
+            self.config["NC_ASSESSMENT_REQUEST_HOST"],
+            self.config["NC_ASSESSMENT_REQUEST_PORT"],
+            route)
 
 
     def plans_uri(self,
@@ -80,6 +91,81 @@ class AssessmentExecutor(object):
                 # Perform the assessment steps
 
 
+                # TODO
+                # - Do whatever it takes to get the assessment done
+                #     - Create a workspace
+                #     - Format/clip/... input data
+                #     - Perform/request calculations
+                #     - Postprocess the results for visualization
+                #     - Remove temp stuff
+
+                # ...
+
+
+
+                with tempfile.TemporaryDirectory() as temp_directory_pathname:
+
+                    zip_filename = "assessment_result.zip"
+                    zip_pathname = os.path.join(temp_directory_pathname,
+                        zip_filename)
+
+
+                    # Create zip-file with raw results
+                    with zipfile.ZipFile(zip_pathname, "w") as zip_file:
+                        # TODO Add the result files
+                        # ...
+
+                        # zip_file.write("/etc/hosts")
+
+                        pass
+
+                        # zip_file.writestr("metainfo.txt", "Blahblahblah")
+
+
+
+                    with open(zip_pathname) as zip_file:
+                        # Add results resource
+                        payload = {
+                            "request_id": request["id"],
+                            # "data": "data.zip",
+                        }
+                        files = {
+                            "data": (None, json.dumps(payload),
+                                "application/json"),
+                            "result": (zip_filename, zip_file,
+                                "application/zip")
+                        }
+                        response = requests.post(
+                            self.assessment_request_uri("assessment_results"),
+                            files=files)
+                        assert response.status_code == 201, response.text
+                        assessment_result = \
+                            response.json()["assessment_result"]
+
+
+                # Add indicator result resources
+                for i in range(4):
+                    payload = {
+                        "result_id": assessment_result["id"],
+                        "difference": "diff{}.map".format(i),
+                        "statistics": {
+                            "current": {
+                                "min": i * 0.5,
+                                "mean": i * 5.5,
+                                "max": i * 10.5
+                            },
+                            "new": {
+                                "min": i * 0.5,
+                                "mean": i * 5.5,
+                                "max": i * 10.5
+                            },
+                        },
+                    }
+                    response = requests.post(
+                        self.assessment_request_uri(
+                            "assessment_indicator_results"),
+                        json={"assessment_indicator_result": payload})
+                    assert response.status_code == 201, response.text
 
 
 
@@ -90,18 +176,6 @@ class AssessmentExecutor(object):
                 response = requests.patch(request_uri, json=payload)
                 assert response.status_code == 200, response.text
 
-
-                # Update the assessment request to reflect the result of the
-                # assessment
-
-
-                # TODO
-                # - Do whatever it takes to get the assessment done
-                #     - Create a workspace
-                #     - Format/clip/... input data
-                #     - Perform/request calculations
-                #     - Postprocess the results for visualization
-                #     - Remove temp stuff
 
 
 
